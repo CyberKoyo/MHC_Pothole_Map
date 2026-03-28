@@ -170,7 +170,6 @@ export default function ReportModal({ mapLocation }: Props) {
                   defaultValue=""
                 >
                   <option value="" disabled>--Select an option--</option>
-                  <option value="" disabled>--Select an option--</option>
                   <option value="minor">Minor (Bumpy)</option>
                   <option value="moderate">Moderate (Might pop a tire)</option>
                   <option value="severe">Severe (Crater)</option>
