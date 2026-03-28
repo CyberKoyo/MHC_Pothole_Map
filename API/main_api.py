@@ -45,6 +45,7 @@ class PotholeCreate(BaseModel):
     zip_code: Optional[str] = None
     borough: Optional[str] = None
     location_description: Optional[str] = None
+    severity: Optional[str] = None
 
 class PotholeUpdate(BaseModel):
     address: Optional[str] = None
@@ -90,6 +91,8 @@ def get_db():
     finally:
         db.close()
 
+Base.metadata.create_all(bind=engine)
+
 app = FastAPI(title="Pothole Tracker API")
 
 #Allows comm with frontend.
@@ -100,7 +103,46 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+
+def _compose_location_description(
+    location_description: Optional[str], severity: Optional[str]
+) -> Optional[str]:
+    parts = []
+    if severity:
+        parts.append(f"Severity: {severity}")
+    if location_description:
+        parts.append(location_description)
+    if not parts:
+        return None
+    return ". ".join(parts)
+
+
+
 # 3. Updated GET Endpoint with search logic
+@app.post("/potholes/", response_model=PotholeResponse)
+def create_pothole(pothole_in: PotholeCreate, db: Session = Depends(get_db)):
+    now = datetime.utcnow()
+    loc = _compose_location_description(
+        pothole_in.location_description, pothole_in.severity
+    )
+    row = Pothole(
+        latitude=pothole_in.latitude,
+        longitude=pothole_in.longitude,
+        address=pothole_in.address,
+        zip_code=pothole_in.zip_code,
+        borough=pothole_in.borough,
+        location_description=loc,
+        first_reported=now,
+        last_reported=now,
+        occurrences=1,
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
 @app.get("/potholes/", response_model=List[PotholeResponse])
 def list_potholes(
     skip: int = Query(0, ge=0),
