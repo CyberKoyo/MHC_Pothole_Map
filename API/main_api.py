@@ -6,7 +6,7 @@ from sqlalchemy.orm import declarative_base, sessionmaker, Session
 from pydantic import BaseModel, ConfigDict
 from datetime import datetime
 from typing import List, Optional
-
+import requests
 
 # Database configuration
 DATABASE_URL = "sqlite:///./potholes.db"
@@ -129,7 +129,7 @@ def reverse_geocode(lat: float, lon: float) -> dict:
     """Calls Nominatim to resolve lat/lng into address, zip_code, and borough.
     Returns a dict with those three keys; any may be None on failure."""
     try:
-        r = _requests.get(
+        r = requests.get(
             "https://nominatim.openstreetmap.org/reverse",
             params={"lat": lat, "lon": lon, "format": "json"},
             headers={"User-Agent": "MHC-Pothole-Map/1.0"},
