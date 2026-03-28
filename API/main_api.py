@@ -6,7 +6,7 @@ from sqlalchemy.orm import declarative_base, sessionmaker, Session
 from pydantic import BaseModel, ConfigDict
 from datetime import datetime
 from typing import List, Optional
-import requests as _requests
+
 
 # Database configuration
 DATABASE_URL = "sqlite:///./potholes.db"
