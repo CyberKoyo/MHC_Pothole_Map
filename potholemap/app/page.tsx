@@ -1,8 +1,8 @@
 "use client"
+import { useState } from 'react';
 import dynamic from 'next/dynamic';
 import Footer from './components/footer';
 import ReportModal from './components/reportModal';
-import { RequestGeolocation } from '@/components/RequestGeolocation';
 
 // Dynamically import the map so it doesn't break SSR
 const MapArea = dynamic(() => import('./components/mapArea'), {
@@ -15,15 +15,15 @@ const MapArea = dynamic(() => import('./components/mapArea'), {
 });
 
 export default function Home() {
+  const [markerPosition, setMarkerPosition] = useState<[number, number]>([40.7128, -74.006]);
+
   return (
     // h-[100dvh] is crucial for mobile: it accounts for the dynamic browser UI bars (like Safari's address bar)
     <main className="flex flex-col h-[100dvh] w-full overflow-hidden bg-white">
-      <RequestGeolocation requestOnMount />
-      
       {/* Map Section - Takes up all available space */}
       <div className="flex-grow relative w-full h-full">
-        <MapArea />
-        <ReportModal />
+        <MapArea markerPosition={markerPosition} setMarkerPosition={setMarkerPosition} />
+        <ReportModal mapLocation={markerPosition} />
       </div>
 
       {/* Footer Section */}

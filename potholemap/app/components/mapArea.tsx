@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import {
   MapContainer,
   TileLayer,
@@ -39,11 +39,12 @@ function LocationMarker({
   );
 }
 
-export default function MapArea() {
-  // 2. Set up state to track the marker's coordinates (Defaults to NYC)
-  const [markerPosition, setMarkerPosition] = useState<[number, number]>([
-    40.7128, -74.006,
-  ]);
+type MapAreaProps = {
+  markerPosition: [number, number];
+  setMarkerPosition: (pos: [number, number]) => void;
+};
+
+export default function MapArea({ markerPosition, setMarkerPosition }: MapAreaProps) {
 
   // Fix for Next.js missing Leaflet marker icons
   useEffect(() => {
