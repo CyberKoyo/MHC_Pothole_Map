@@ -1,14 +1,18 @@
 "use client";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import {
   MapContainer,
   TileLayer,
   Marker,
   Popup,
   useMapEvents,
+  useMap,
 } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
+import "leaflet.markercluster/dist/MarkerCluster.css";
+import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 import L from "leaflet";
+import "leaflet.markercluster";
 import type { Pothole } from "../page";
 
 // 1. Create a child component to handle map clicks
@@ -47,6 +51,59 @@ const potholeIcon = L.divIcon({
   iconAnchor: [8, 8],
   popupAnchor: [0, -10],
 });
+
+// Native Leaflet cluster layer – react-leaflet v5 has no official cluster wrapper
+function PotholeClusterLayer({ potholes }: { potholes: Pothole[] }) {
+  const map = useMap();
+  const clusterRef = useRef<L.MarkerClusterGroup | null>(null);
+
+  useEffect(() => {
+    const cluster = L.markerClusterGroup({
+      maxClusterRadius: 60,
+      iconCreateFunction(c) {
+        const count = c.getChildCount();
+        const size = count < 10 ? 36 : count < 50 ? 48 : 60;
+        return L.divIcon({
+          html: `<div style="
+            width:${size}px;height:${size}px;
+            background:rgba(220,38,38,0.85);
+            border:3px solid white;
+            border-radius:50%;
+            display:flex;align-items:center;justify-content:center;
+            color:white;font-weight:700;font-size:${size < 48 ? 13 : 15}px;
+            box-shadow:0 2px 8px rgba(0,0,0,0.4);
+          ">${count}</div>`,
+          className: "",
+          iconSize: [size, size],
+          iconAnchor: [size / 2, size / 2],
+        });
+      },
+    });
+
+    potholes.forEach((p) => {
+      const marker = L.marker([p.latitude, p.longitude], { icon: potholeIcon });
+      const desc = p.location_description
+        ? `<br/>${p.location_description}`
+        : "";
+      marker.bindPopup(
+        `<strong style="color:#dc2626">Reported Pothole</strong>${desc}<br/>
+         <span style="color:#64748b;font-size:12px">
+           Reported ${p.occurrences} time${p.occurrences !== 1 ? "s" : ""}
+         </span>`
+      );
+      cluster.addLayer(marker);
+    });
+
+    map.addLayer(cluster);
+    clusterRef.current = cluster;
+
+    return () => {
+      map.removeLayer(cluster);
+    };
+  }, [map, potholes]);
+
+  return null;
+}
 
 type MapAreaProps = {
   markerPosition: [number, number];
@@ -95,21 +152,8 @@ export default function MapArea({ markerPosition, setMarkerPosition, potholes }:
           setPosition={setMarkerPosition}
         />
 
-        {/* One red dot for every reported pothole */}
-        {potholes.map((p) => (
-          <Marker key={p.id} position={[p.latitude, p.longitude]} icon={potholeIcon}>
-            <Popup>
-              <strong className="text-red-600">Reported Pothole</strong>
-              {p.location_description && (
-                <><br />{p.location_description}</>
-              )}
-              <br />
-              <span className="text-slate-500 text-xs">
-                Reported {p.occurrences} time{p.occurrences !== 1 ? "s" : ""}
-              </span>
-            </Popup>
-          </Marker>
-        ))}
+        {/* Clustered pothole markers */}
+        <PotholeClusterLayer potholes={potholes} />
       </MapContainer>
     </div>
   );
