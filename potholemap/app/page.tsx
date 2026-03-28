@@ -1,6 +1,5 @@
 "use client"
 import { useState, useEffect } from 'react';
->>>>>>> Stashed changes
 import dynamic from 'next/dynamic';
 import Footer from './components/footer';
 import ReportModal from './components/reportModal';
