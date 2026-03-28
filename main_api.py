@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import List, Optional
 
 from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import Column, DateTime, Float, Integer, String, create_engine, func
 from sqlalchemy.orm import Session, declarative_base, sessionmaker
@@ -69,6 +70,16 @@ def get_db():
 # FastAPI app
 app = FastAPI(title="Pothole Tracker API", version="1.0.0")
 
+# Any localhost / 127.0.0.1 port (Next dev can use 3000, 3001, etc.)
+_DEV_ORIGIN_RE = r"https?://(localhost|127\.0\.0\.1)(:\d+)?$"
+app.add_middleware(
+    CORSMiddleware,
+    allow_origin_regex=_DEV_ORIGIN_RE,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 # Endpoints
 
 
@@ -88,15 +99,6 @@ def create_pothole(pothole: PotholeCreate, db: Session = Depends(get_db)):
     return db_pothole
 
 
-@app.get("/potholes/{address}", response_model=PotholeResponse)
-def get_pothole(address: str, db: Session = Depends(get_db)):
-    """Get a specific pothole by address (primary key)."""
-    pothole = db.query(PotholeDB).filter(PotholeDB.address == address).first()
-    if not pothole:
-        raise HTTPException(status_code=404, detail="Pothole not found")
-    return pothole
-
-
 @app.get("/potholes/", response_model=List[PotholeResponse])
 def list_potholes(
     skip: int = Query(0, ge=0),
@@ -108,6 +110,15 @@ def list_potholes(
     query = db.query(PotholeDB).filter(PotholeDB.occurrences >= min_occurrences)
     potholes = query.order_by(PotholeDB.address).offset(skip).limit(limit).all()
     return potholes
+
+
+@app.get("/potholes/{address}", response_model=PotholeResponse)
+def get_pothole(address: str, db: Session = Depends(get_db)):
+    """Get a specific pothole by address (primary key)."""
+    pothole = db.query(PotholeDB).filter(PotholeDB.address == address).first()
+    if not pothole:
+        raise HTTPException(status_code=404, detail="Pothole not found")
+    return pothole
 
 
 @app.put("/potholes/{address}", response_model=PotholeResponse)
