@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 const DEFAULT_TIMEOUT_MS = 60_000;
 
@@ -12,13 +12,23 @@ type Props = {
   requestOnMount?: boolean;
   /** Max time to wait for a position fix (ms). */
   timeoutMs?: number;
+  /**
+   * Called with the user's coordinates once a GPS fix is obtained.
+   * Use this to move the map/marker — do NOT write to the database here.
+   */
+  onLocationFound?: (latitude: number, longitude: number) => void;
 };
 
 export function RequestGeolocation({
   requestOnMount = false,
   timeoutMs = DEFAULT_TIMEOUT_MS,
+  onLocationFound,
 }: Props) {
   const [hint, setHint] = useState<string | null>(null);
+
+  // Stable ref so the callback never causes requestLocation to be re-created.
+  const onLocationFoundRef = useRef(onLocationFound);
+  useEffect(() => { onLocationFoundRef.current = onLocationFound; }, [onLocationFound]);
 
   const requestLocation = useCallback(() => {
     setHint("Requesting location…");
@@ -32,23 +42,13 @@ export function RequestGeolocation({
 
     navigator.geolocation.getCurrentPosition(
       (position) => {
-        const { latitude, longitude, accuracy, altitude, heading, speed } =
-          position.coords;
-        const payload = {
-          latitude,
-          longitude,
-          accuracy,
-          altitude,
-          heading,
-          speed,
-        };
-        // Logs only show in the browser DevTools Console (F12), not in the terminal.
-        console.log("[geolocation] position", payload);
+        const { latitude, longitude, accuracy } = position.coords;
         console.log(
           `[geolocation] lat=${latitude} lng=${longitude} accuracy=${accuracy}m`,
         );
+        onLocationFoundRef.current?.(latitude, longitude);
         setHint(
-          `Got fix: ${latitude.toFixed(5)}, ${longitude.toFixed(5)} (±${Math.round(accuracy)}m)`,
+          `Located: ${latitude.toFixed(5)}, ${longitude.toFixed(5)} (±${Math.round(accuracy)}m)`,
         );
       },
       (error) => {
