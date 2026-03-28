@@ -34,8 +34,8 @@ export function RequestGeolocation({
     setHint("Requesting location…");
     if (typeof navigator === "undefined" || !navigator.geolocation) {
       const msg =
-        "[geolocation] Not available (unsupported or non-secure context).";
-      console.error(msg);
+        "Location is not available. Make sure the page is loaded over HTTPS and your browser supports geolocation.";
+      console.error("[geolocation] Not available (unsupported or non-secure context).");
       setHint(msg);
       return;
     }
@@ -66,9 +66,13 @@ export function RequestGeolocation({
           `code=${error.code}`,
           error.message,
         );
-        setHint(`Error (${label}): ${error.message}`);
+        const hint =
+          error.code === 1
+            ? "Location access was denied. On mobile, go to your browser's Settings → Site permissions → Location and allow access, then try again."
+            : `Error (${label}): ${error.message}`;
+        setHint(hint);
       },
-      { enableHighAccuracy: false, maximumAge: 0, timeout: timeoutMs },
+      { enableHighAccuracy: true, maximumAge: 0, timeout: timeoutMs },
     );
   }, [timeoutMs]);
 
@@ -86,7 +90,7 @@ export function RequestGeolocation({
       <button
         type="button"
         onClick={requestLocation}
-        className="rounded-full border border-solid border-black/[.08] px-4 py-2 text-sm font-medium text-zinc-950 transition-colors hover:bg-black/[.04] dark:border-white/[.145] dark:text-zinc-50 dark:hover:bg-[#1a1a1a]"
+        className="rounded-full border border-solid border-black/[.08] px-5 py-3 text-sm font-medium text-zinc-950 transition-colors hover:bg-black/[.04] active:bg-black/[.08] dark:border-white/[.145] dark:text-zinc-50 dark:hover:bg-[#1a1a1a] dark:active:bg-[#2a2a2a] touch-manipulation"
       >
         Use my location
       </button>

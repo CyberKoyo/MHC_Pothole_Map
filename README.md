@@ -1,1 +1,1 @@
-test
+Potholes pose significant safety risks and economic burdens, costing U.S. drivers roughly $3 billion annually in repairs—an average of $406 per incident, say Vialytics, Michelin Mobility Intelligence, and RockAsphalt
