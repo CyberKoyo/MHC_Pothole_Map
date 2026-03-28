@@ -1,14 +1,18 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef } from "react";
 import {
   MapContainer,
   TileLayer,
   Marker,
   Popup,
   useMapEvents,
+  useMap,
 } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
+import "leaflet.markercluster/dist/MarkerCluster.css";
+import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 import L from "leaflet";
+import "leaflet.markercluster";
 import type { Pothole } from "../page";
 
 // 1. Create a child component to handle map clicks
@@ -40,7 +44,6 @@ function LocationMarker({
   );
 }
 
-
 const potholeIcon = L.divIcon({
   className: "",
   html: '<div style="width:16px;height:16px;background:#dc2626;border:2px solid white;border-radius:50%;box-shadow:0 2px 6px rgba(0,0,0,0.45)"></div>',
@@ -48,6 +51,59 @@ const potholeIcon = L.divIcon({
   iconAnchor: [8, 8],
   popupAnchor: [0, -10],
 });
+
+// Native Leaflet cluster layer – react-leaflet v5 has no official cluster wrapper
+function PotholeClusterLayer({ potholes }: { potholes: Pothole[] }) {
+  const map = useMap();
+  const clusterRef = useRef<L.MarkerClusterGroup | null>(null);
+
+  useEffect(() => {
+    const cluster = L.markerClusterGroup({
+      maxClusterRadius: 60,
+      iconCreateFunction(c) {
+        const count = c.getChildCount();
+        const size = count < 10 ? 36 : count < 50 ? 48 : 60;
+        return L.divIcon({
+          html: `<div style="
+            width:${size}px;height:${size}px;
+            background:rgba(220,38,38,0.85);
+            border:3px solid white;
+            border-radius:50%;
+            display:flex;align-items:center;justify-content:center;
+            color:white;font-weight:700;font-size:${size < 48 ? 13 : 15}px;
+            box-shadow:0 2px 8px rgba(0,0,0,0.4);
+          ">${count}</div>`,
+          className: "",
+          iconSize: [size, size],
+          iconAnchor: [size / 2, size / 2],
+        });
+      },
+    });
+
+    potholes.forEach((p) => {
+      const marker = L.marker([p.latitude, p.longitude], { icon: potholeIcon });
+      const desc = p.location_description
+        ? `<br/>${p.location_description}`
+        : "";
+      marker.bindPopup(
+        `<strong style="color:#dc2626">Reported Pothole</strong>${desc}<br/>
+         <span style="color:#64748b;font-size:12px">
+           Reported ${p.occurrences} time${p.occurrences !== 1 ? "s" : ""}
+         </span>`
+      );
+      cluster.addLayer(marker);
+    });
+
+    map.addLayer(cluster);
+    clusterRef.current = cluster;
+
+    return () => {
+      map.removeLayer(cluster);
+    };
+  }, [map, potholes]);
+
+  return null;
+}
 
 type MapAreaProps = {
   markerPosition: [number, number];
@@ -68,6 +124,29 @@ export default function MapArea({ markerPosition, setMarkerPosition, potholes }:
         "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
     });
   }, []);
+  const handleDelete = async (id: number) => {
+    const token = localStorage.getItem('access_token');
+    
+    if (!confirm("Are you sure you want to resolve and remove this pothole?")) return;
+
+    try {
+      const response = await fetch(`http://localhost:8000/potholes/${id}`, {
+        method: 'DELETE',
+        headers: {
+          'access_token': token || "" 
+        }
+      });
+
+      if (response.ok) {
+        alert("Pothole resolved!");
+        window.location.reload(); 
+      } else {
+        alert("Unauthorized or error occurred.");
+      }
+    } catch (error) {
+      console.error("Error:", error);
+    }
+  };
 
   return (
     <div className="w-full h-full relative z-0">
@@ -108,9 +187,22 @@ export default function MapArea({ markerPosition, setMarkerPosition, potholes }:
               <span className="text-slate-500 text-xs">
                 Reported {p.occurrences} time{p.occurrences !== 1 ? "s" : ""}
               </span>
+
+              {/* ADMIN ACTION: Resolve/Delete Button */}
+              {typeof window !== 'undefined' && localStorage.getItem('access_token') && (
+                <div className="mt-3 pt-2 border-t border-slate-100 flex flex-col gap-2">
+                  
+                  <button
+                    onClick={() => handleDelete(p.id)}
+                    className="w-full bg-green-600 hover:bg-green-700 text-white text-[10px] font-bold py-1 px-2 rounded"
+                  >
+                    Mark as Resolved
+                  </button>
+                </div>
+              )}
             </Popup>
           </Marker>
-        ))}
+        ))} 
       </MapContainer>
     </div>
   );

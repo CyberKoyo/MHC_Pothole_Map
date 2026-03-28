@@ -1,9 +1,10 @@
 "use client"
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import Footer from './components/footer';
 import ReportModal from './components/reportModal';
 import { RequestGeolocation } from '@/components/RequestGeolocation';
+import Header from './components/header';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? 'http://localhost:8000';
 
@@ -26,7 +27,6 @@ const MapArea = dynamic(() => import('./components/mapArea'), {
 });
 
 export default function Home() {
-
   const [markerPosition, setMarkerPosition] = useState<[number, number]>([40.7128, -74.006]);
   const [potholes, setPotholes] = useState<Pothole[]>([]);
 
@@ -37,14 +37,19 @@ export default function Home() {
       .catch((err) => console.error('Failed to load potholes:', err));
   }, []);
 
-  function addPothole(pothole: Pothole) {
+  const addPothole = useCallback((pothole: Pothole) => {
     setPotholes((prev) => [...prev, pothole]);
-  }
+  }, []);
 
   return (
     // h-[100dvh] is crucial for mobile: it accounts for the dynamic browser UI bars (like Safari's address bar)
     <main className="flex flex-col h-[100dvh] w-full overflow-hidden bg-white">
-      <RequestGeolocation requestOnMount />
+      <Header />
+      
+      <RequestGeolocation
+        requestOnMount
+        onLocationFound={(lat, lng) => setMarkerPosition([lat, lng])}
+      />
       
       {/* Map Section - Takes up all available space */}
       <div className="flex-grow relative w-full h-full">

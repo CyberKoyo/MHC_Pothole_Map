@@ -1,11 +1,12 @@
-from fastapi import FastAPI, HTTPException, Query, Depends
+from fastapi import FastAPI, HTTPException, Query, Depends, Security, status
+from fastapi.security.api_key import APIKeyHeader
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import create_engine, Column, Integer, String, DateTime, Float
 from sqlalchemy.orm import declarative_base, sessionmaker, Session
 from pydantic import BaseModel, ConfigDict
 from datetime import datetime
 from typing import List, Optional
-import requests as _requests
+import requests
 
 # Database configuration
 DATABASE_URL = "sqlite:///./potholes.db"
@@ -70,6 +71,28 @@ class PotholeResponse(BaseModel):
     last_reported: datetime
     occurrences: int
 
+# Authentication
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+# Define the header key name
+api_key_header = APIKeyHeader(name="access_token", auto_error=False)
+
+async def get_admin_user(api_key: str = Security(api_key_header)):
+    """
+    Checks if the provided API key is valid.
+    Used to protect SENSITIVE routes (PUT, DELETE).
+    """
+    if api_key == "your_super_secret_admin_key":
+        return True
+    
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Not authorized. Please sign in as an admin."
+    )
+
+
 # Dependency for database session
 def get_db():
     db = SessionLocal()
@@ -82,21 +105,31 @@ Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="Pothole Tracker API")
 
+#Allows comm with frontend.
 app.add_middleware(
     CORSMiddleware,
-    allow_origin_regex=r"https?://(localhost|127\.0\.0\.1)(:\d+)?",
-    allow_credentials=True,
+    allow_origins=["*"], # For hackathons, allowing all is fine
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-
+# auth continued 
+@app.post("/login")
+async def login(data: LoginRequest):
+    # REPLACE THIS with actual database user verification
+    if data.email == "admin@nyc.gov" and data.password == "password123":
+        return {"access_token": "your_super_secret_admin_key", "token_type": "bearer"}
+    
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Invalid email or password"
+    )
 
 def reverse_geocode(lat: float, lon: float) -> dict:
     """Calls Nominatim to resolve lat/lng into address, zip_code, and borough.
     Returns a dict with those three keys; any may be None on failure."""
     try:
-        r = _requests.get(
+        r = requests.get(
             "https://nominatim.openstreetmap.org/reverse",
             params={"lat": lat, "lon": lon, "format": "json"},
             headers={"User-Agent": "MHC-Pothole-Map/1.0"},
@@ -125,6 +158,7 @@ def _compose_location_description(
     if not parts:
         return None
     return ". ".join(parts)
+
 
 
 # 3. Updated GET Endpoint with search logic
@@ -200,7 +234,9 @@ def list_potholes(
 def update_pothole(
     pothole_id: int,
     pothole_update: PotholeUpdate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    #Prevents general user deletion
+    admin: bool = Depends(get_admin_user)
 ):
     """Update a pothole"""
     pothole = db.query(Pothole).filter(Pothole.id == pothole_id).first()
@@ -229,7 +265,12 @@ def report_pothole_again(pothole_id: int, db: Session = Depends(get_db)):
     return {"message": "Pothole reported", "occurrences": pothole.occurrences}
 
 @app.delete("/potholes/{pothole_id}", status_code=204)
-def delete_pothole(pothole_id: int, db: Session = Depends(get_db)):
+def delete_pothole(
+    pothole_id: int, 
+    db: Session = Depends(get_db),
+    #Prevents general user deletion
+    admin: bool = Depends(get_admin_user)
+    ):
     """Delete a pothole record"""
     pothole = db.query(Pothole).filter(Pothole.id == pothole_id).first()
     if not pothole:
