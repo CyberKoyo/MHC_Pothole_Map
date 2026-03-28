@@ -71,17 +71,26 @@ class PotholeResponse(BaseModel):
     occurrences: int
 
 # Authentication
-API_KEY = "your_super_secret_admin_key"
-API_KEY_NAME = "access_token"
-api_key_header = APIKeyHeader(name=API_KEY_NAME, auto_error=False)
+class LoginRequest(BaseModel):
+    email: str
+    password: str
 
-async def get_admin_user(api_key_header: str = Security(api_key_header)):
-    if api_key_header == API_KEY:
+# Define the header key name
+api_key_header = APIKeyHeader(name="access_token", auto_error=False)
+
+async def get_admin_user(api_key: str = Security(api_key_header)):
+    """
+    Checks if the provided API key is valid.
+    Used to protect SENSITIVE routes (PUT, DELETE).
+    """
+    if api_key == "your_super_secret_admin_key":
         return True
+    
     raise HTTPException(
-        status_code=status.HTTP_403_FORBIDDEN, 
-        detail="Could not validate Admin credentials"
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Not authorized. Please sign in as an admin."
     )
+
 
 # Dependency for database session
 def get_db():
@@ -103,7 +112,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
+# auth continued 
+@app.post("/login")
+async def login(data: LoginRequest):
+    # REPLACE THIS with actual database user verification
+    if data.email == "admin@nyc.gov" and data.password == "password123":
+        return {"access_token": "your_super_secret_admin_key", "token_type": "bearer"}
+    
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Invalid email or password"
+    )
 
 def _compose_location_description(
     location_description: Optional[str], severity: Optional[str]
