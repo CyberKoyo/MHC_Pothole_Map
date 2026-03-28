@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 
 type LocationState =
   | { status: 'idle' }
@@ -14,12 +14,17 @@ const API_BASE = 'http://localhost:8000';
 export default function ReportModal() {
   const [isOpen, setIsOpen] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [location, setLocation] = useState<LocationState>({ status: 'idle' });
+  const [description, setDescription] = useState('');
+  const [severity, setSeverity] = useState('');
+  const [submitState, setSubmitState] = useState<SubmitState>('idle');
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Handle file selection
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
     if (!files || files.length === 0) return;
-
     setSelectedFiles((prev) => [...prev, ...Array.from(files)]);
   };
 
@@ -30,26 +35,19 @@ export default function ReportModal() {
 
   // Display file names
   const fileNames = selectedFiles.length === 0
-    ? "No files selected"
+    ? 'No files selected'
     : `${selectedFiles.length} file(s) selected`;
 
-  // Close modal and reset files
-  const handleClose = () => {
-    setIsOpen(false);
-    setSelectedFiles([]);
-  };
-  const [location, setLocation] = useState<LocationState>({ status: 'idle' });
-  const [description, setDescription] = useState('');
-  const [severity, setSeverity] = useState('');
-  const [submitState, setSubmitState] = useState<SubmitState>('idle');
-
+  // Open modal and get location
   function openModal() {
     setIsOpen(true);
     setSubmitState('idle');
     setDescription('');
     setSeverity('');
-    setLocation({ status: 'loading' });
+    setSelectedFiles([]);
+    if (fileInputRef.current) fileInputRef.current.value = '';
 
+    setLocation({ status: 'loading' });
     navigator.geolocation.getCurrentPosition(
       (pos) => setLocation({ status: 'ready', latitude: pos.coords.latitude, longitude: pos.coords.longitude }),
       (err) => setLocation({ status: 'error', message: err.message }),
@@ -57,12 +55,18 @@ export default function ReportModal() {
     );
   }
 
+  // Close modal and reset everything
   function closeModal() {
     setIsOpen(false);
     setLocation({ status: 'idle' });
     setSubmitState('idle');
+    setSelectedFiles([]);
+    setDescription('');
+    setSeverity('');
+    if (fileInputRef.current) fileInputRef.current.value = '';
   }
 
+  // Submit form
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (location.status !== 'ready') return;
@@ -103,14 +107,14 @@ export default function ReportModal() {
       {isOpen && (
         <div className="absolute inset-0 z-[500] bg-black/50 flex items-center justify-center p-4">
           <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-md flex flex-col gap-4">
-            
+
             {/* Modal header */}
             <div className="flex items-center justify-between">
               <h2 className="text-2xl font-bold text-slate-800">Report a Pothole</h2>
               <button
                 type="button"
                 className="rounded-lg bg-red-600 hover:bg-red-700 text-xl font-bold w-10 h-10"
-                onClick={handleClose}
+                onClick={closeModal}
               >
                 X
               </button>
@@ -127,10 +131,9 @@ export default function ReportModal() {
             </div>
 
             <form className="flex flex-col gap-3" onSubmit={handleSubmit}>
+              {/* Location Description */}
               <div className="flex flex-col">
-                <p className="text-slate-800">
-                  Location Description
-                </p>
+                <p className="text-slate-800">Location Description</p>
                 <input
                   type="text"
                   placeholder="Location Description (e.g. Right lane on 5th Ave)"
@@ -143,11 +146,11 @@ export default function ReportModal() {
               {/* Severity */}
               <div className="flex flex-col">
                 <p className="text-slate-800">Severity</p>
-                <select 
+                <select
+                  value={severity}
+                  onChange={(e) => setSeverity(e.target.value)}
                   className="w-full border border-slate-300 rounded-lg p-3 text-black outline-none"
-                  defaultValue=""
                 >
-                  <option value="" disabled>--Select an option--</option>
                   <option value="" disabled>--Select an option--</option>
                   <option value="minor">Minor (Bumpy)</option>
                   <option value="moderate">Moderate (Might pop a tire)</option>
@@ -158,14 +161,13 @@ export default function ReportModal() {
               {/* Image upload */}
               <div className="flex flex-col">
                 <p className="text-slate-800">Image(s)</p>
-                
-                {/* File input label */}
                 <label className="w-full border border-slate-300 rounded-lg p-3 text-black flex justify-between items-center cursor-pointer">
                   {fileNames}
                   <input
                     type="file"
                     accept="image/*"
                     multiple
+                    ref={fileInputRef}
                     className="hidden"
                     onChange={handleFileChange}
                   />
@@ -198,6 +200,7 @@ export default function ReportModal() {
                 )}
               </div>
 
+              {/* Submit / Cancel buttons */}
               {submitState === 'success' && (
                 <p className="text-green-600 font-semibold text-center">✅ Pothole reported!</p>
               )}
@@ -205,8 +208,6 @@ export default function ReportModal() {
                 <p className="text-red-600 text-sm text-center">Failed to submit. Is the API running?</p>
               )}
 
-
-              {/* Submit button */}
               <div className="flex gap-3 mt-2">
                 <button
                   type="button"
@@ -221,15 +222,8 @@ export default function ReportModal() {
                   className="flex-1 py-3 rounded-lg font-semibold text-white bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {submitState === 'submitting' ? 'Submitting…' : 'Submit Report'}
-                  {submitState === 'success' && (
-                    <p className="text-green-600 font-semibold text-center">✅ Pothole reported!</p>
-                  )}
-                  {submitState === 'error' && (
-                    <p className="text-red-600 text-sm text-center">Failed to submit. Is the API running?</p>
-                  )}
                 </button>
               </div>
-
             </form>
           </div>
         </div>
