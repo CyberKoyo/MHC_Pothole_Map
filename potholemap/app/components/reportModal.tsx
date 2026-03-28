@@ -15,12 +15,14 @@ export default function ReportModal() {
   const [isOpen, setIsOpen] = useState(false);
   const [location, setLocation] = useState<LocationState>({ status: 'idle' });
   const [description, setDescription] = useState('');
+  const [severity, setSeverity] = useState('');
   const [submitState, setSubmitState] = useState<SubmitState>('idle');
 
   function openModal() {
     setIsOpen(true);
     setSubmitState('idle');
     setDescription('');
+    setSeverity('');
     setLocation({ status: 'loading' });
 
     navigator.geolocation.getCurrentPosition(
@@ -49,6 +51,7 @@ export default function ReportModal() {
           latitude: location.latitude,
           longitude: location.longitude,
           location_description: description || undefined,
+          severity: severity || undefined,
         }),
       });
 
@@ -75,13 +78,20 @@ export default function ReportModal() {
       {isOpen && (
         <div className="absolute inset-0 z-[500] bg-black/50 flex items-center justify-center p-4">
           <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-md flex flex-col gap-4">
-            <h2 className="text-2xl font-bold text-slate-800">Report a Pothole</h2>
-            <p className="text-sm text-slate-600">Submits your current location to warn others.</p>
+            <div className="flex items-center justify-between">
+              <h2 className="text-2xl font-bold text-slate-800">Report a Pothole</h2>
+              <button
+                type="button"
+                className="rounded-lg bg-red-600 hover:bg-red-700 text-white text-xl font-bold w-10 h-10"
+                onClick={closeModal}
+              >
+                X
+              </button>
+            </div>
+            <p className="text-sm text-slate-600">Pinpoint the hazard to warn others.</p>
 
             {/* Location status */}
-            <div className="rounded-lg p-3 text-sm font-medium flex items-center gap-2
-              bg-slate-100 text-slate-600
-            ">
+            <div className="rounded-lg p-3 text-sm font-medium flex items-center gap-2 bg-slate-100 text-slate-600">
               {location.status === 'loading' && <><span className="animate-spin">⏳</span> Getting your location…</>}
               {location.status === 'ready' && <>📍 {location.latitude.toFixed(5)}, {location.longitude.toFixed(5)}</>}
               {location.status === 'error' && <span className="text-red-600">⚠️ {location.message}</span>}
@@ -89,13 +99,43 @@ export default function ReportModal() {
             </div>
 
             <form className="flex flex-col gap-3" onSubmit={handleSubmit}>
-              <input
-                type="text"
-                placeholder="Description (e.g. Right lane on 5th Ave)"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                className="w-full border border-slate-300 rounded-lg p-3 text-black focus:ring-2 focus:ring-red-500 outline-none"
-              />
+              <div className="flex flex-col">
+                <p className="text-slate-800">
+                  Location Description
+                </p>
+                <input
+                  type="text"
+                  placeholder="Location Description (e.g. Right lane on 5th Ave)"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  className="w-full border border-slate-300 rounded-lg p-3 text-black focus:ring-2 focus:ring-red-500 outline-none -mt-0.5"
+                />
+              </div>
+              <div className="flex flex-col">
+                <p className="text-slate-800">
+                  Severity <span className="text-red-600"> * </span>
+                </p>
+                <select
+                  className="w-full border border-slate-300 rounded-lg p-3 text-black outline-none"
+                  value={severity}
+                  onChange={(e) => setSeverity(e.target.value)}
+                  required
+                >
+                  <option value="" disabled>--Select an option--</option>
+                  <option value="minor">Minor (Bumpy)</option>
+                  <option value="moderate">Moderate (Might pop a tire)</option>
+                  <option value="severe">Severe (Crater)</option>
+                </select>
+              </div>
+              <div className="flex flex-col">
+                <p className="text-slate-800">Image(s)</p>
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  className="w-full border border-slate-300 rounded-lg p-3 text-black outline-none"
+                />
+              </div>
 
               {submitState === 'success' && (
                 <p className="text-green-600 font-semibold text-center">✅ Pothole reported!</p>
