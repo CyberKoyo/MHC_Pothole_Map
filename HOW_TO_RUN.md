@@ -13,7 +13,7 @@ From the **repository root**:
 
 ```bash
 python -m venv .venv
-source .venv/bin/activate   # Windows: .venv\Scripts\activate
+source .venv/Scripts/activate   # Windows: .venv\Scripts\activate
 pip install -r API/requirements.txt
 python API/main_api.py
 ```

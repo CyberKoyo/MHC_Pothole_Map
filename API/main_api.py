@@ -6,6 +6,7 @@ from sqlalchemy.orm import declarative_base, sessionmaker, Session
 from pydantic import BaseModel, ConfigDict
 from datetime import datetime
 from typing import List, Optional
+import requests as _requests
 
 # Database configuration
 DATABASE_URL = "sqlite:///./potholes.db"
@@ -124,6 +125,28 @@ async def login(data: LoginRequest):
         detail="Invalid email or password"
     )
 
+def reverse_geocode(lat: float, lon: float) -> dict:
+    """Calls Nominatim to resolve lat/lng into address, zip_code, and borough.
+    Returns a dict with those three keys; any may be None on failure."""
+    try:
+        r = _requests.get(
+            "https://nominatim.openstreetmap.org/reverse",
+            params={"lat": lat, "lon": lon, "format": "json"},
+            headers={"User-Agent": "MHC-Pothole-Map/1.0"},
+            timeout=5,
+        )
+        r.raise_for_status()
+        addr = r.json().get("address", {})
+        road = " ".join(filter(None, [addr.get("house_number"), addr.get("road")]))
+        return {
+            "address": road or None,
+            "zip_code": addr.get("postcode"),
+            "borough": addr.get("suburb") or addr.get("borough") or addr.get("city_district"),
+        }
+    except Exception:
+        return {"address": None, "zip_code": None, "borough": None}
+
+
 def _compose_location_description(
     location_description: Optional[str], severity: Optional[str]
 ) -> Optional[str]:
@@ -145,12 +168,17 @@ def create_pothole(pothole_in: PotholeCreate, db: Session = Depends(get_db)):
     loc = _compose_location_description(
         pothole_in.location_description, pothole_in.severity
     )
+
+    geo: dict = {}
+    if not (pothole_in.address and pothole_in.zip_code and pothole_in.borough):
+        geo = reverse_geocode(pothole_in.latitude, pothole_in.longitude)
+
     row = Pothole(
         latitude=pothole_in.latitude,
         longitude=pothole_in.longitude,
-        address=pothole_in.address,
-        zip_code=pothole_in.zip_code,
-        borough=pothole_in.borough,
+        address=pothole_in.address or geo.get("address"),
+        zip_code=pothole_in.zip_code or geo.get("zip_code"),
+        borough=pothole_in.borough or geo.get("borough"),
         location_description=loc,
         first_reported=now,
         last_reported=now,
