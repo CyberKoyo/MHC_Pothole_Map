@@ -238,13 +238,17 @@ def list_potholes(
     min_occurrences: Optional[int] = Query(None, ge=0),
     max_occurrences: Optional[int] = Query(None, ge=0),
     sort_by_frequency: bool = False,
+    include_deleted: bool = False,
     db: Session = Depends(get_db)
 ):
     """
     List potholes with filters for location and occurrence count.
     Set sort_by_frequency=True to see the most reported potholes first.
+    Set include_deleted=True to also return soft-deleted (resolved) potholes.
     """
-    query = db.query(Pothole).filter(Pothole.deleted == None)
+    query = db.query(Pothole)
+    if not include_deleted:
+        query = query.filter(Pothole.deleted == None)
 
     # Location Filters
     if borough:
