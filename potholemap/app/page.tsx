@@ -13,7 +13,12 @@ export type Pothole = {
   id: number;
   latitude: number;
   longitude: number;
+  address: string | null;
+  zip_code: string | null;
+  borough: string | null;
   location_description?: string | null;
+  first_reported: string;
+  last_reported: string;
   severity?: string | null;
   occurrences: number;
   borough?: string | null;
