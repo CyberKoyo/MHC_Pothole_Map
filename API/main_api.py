@@ -1,15 +1,21 @@
-from fastapi import FastAPI, HTTPException, Query, Depends, Security, status
+from fastapi import FastAPI, HTTPException, Query, Depends, Security, status, UploadFile, File
 from fastapi.security.api_key import APIKeyHeader
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import create_engine, Column, Integer, String, DateTime, Float
-from sqlalchemy.orm import declarative_base, sessionmaker, Session
+from fastapi.staticfiles import StaticFiles
+from sqlalchemy import create_engine, Column, Integer, String, DateTime, Float, ForeignKey
+from sqlalchemy.orm import declarative_base, sessionmaker, Session, relationship
 from pydantic import BaseModel, ConfigDict
 from datetime import datetime
 from typing import List, Optional
 import requests
+import uuid
+import pathlib
 
 # Database configuration
 DATABASE_URL = "sqlite:///./potholes.db"
+
+UPLOADS_DIR = pathlib.Path(__file__).parent / "uploads"
+UPLOADS_DIR.mkdir(exist_ok=True)
 
 engine = create_engine(
     DATABASE_URL,
@@ -37,6 +43,18 @@ class Pothole(Base):
     first_reported = Column(DateTime, default=datetime.utcnow, nullable=False)
     last_reported = Column(DateTime, default=datetime.utcnow, nullable=False)
     occurrences = Column(Integer, default=1, nullable=False)
+
+    images = relationship("PotholeImage", back_populates="pothole", cascade="all, delete-orphan")
+
+
+class PotholeImage(Base):
+    __tablename__ = "pothole_images"
+
+    id = Column(Integer, primary_key=True, index=True)
+    pothole_id = Column(Integer, ForeignKey("potholes.id"), nullable=False, index=True)
+    filename = Column(String, nullable=False)
+
+    pothole = relationship("Pothole", back_populates="images")
 
 # 2. Updated Pydantic Schemas
 class PotholeCreate(BaseModel):
@@ -112,6 +130,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.mount("/uploads", StaticFiles(directory=str(UPLOADS_DIR)), name="uploads")
 
 # auth continued 
 @app.post("/login")
@@ -279,6 +299,40 @@ def delete_pothole(
     db.delete(pothole)
     db.commit()
     return None
+
+@app.post("/potholes/{pothole_id}/images", status_code=201)
+async def upload_pothole_images(
+    pothole_id: int,
+    files: List[UploadFile] = File(...),
+    db: Session = Depends(get_db),
+):
+    """Upload one or more images for a pothole."""
+    pothole = db.query(Pothole).filter(Pothole.id == pothole_id).first()
+    if not pothole:
+        raise HTTPException(status_code=404, detail="Pothole not found")
+
+    saved = []
+    for upload in files:
+        ext = pathlib.Path(upload.filename or "image.jpg").suffix or ".jpg"
+        filename = f"{uuid.uuid4().hex}{ext}"
+        dest = UPLOADS_DIR / filename
+        content = await upload.read()
+        dest.write_bytes(content)
+        db.add(PotholeImage(pothole_id=pothole_id, filename=filename))
+        saved.append(f"/uploads/{filename}")
+
+    db.commit()
+    return {"uploaded": saved}
+
+
+@app.get("/potholes/{pothole_id}/images")
+def get_pothole_images(pothole_id: int, db: Session = Depends(get_db)):
+    """Return a list of image URL paths for a pothole."""
+    pothole = db.query(Pothole).filter(Pothole.id == pothole_id).first()
+    if not pothole:
+        raise HTTPException(status_code=404, detail="Pothole not found")
+    return [f"/uploads/{img.filename}" for img in pothole.images]
+
 
 @app.get("/stats/")
 def get_stats(db: Session = Depends(get_db)):

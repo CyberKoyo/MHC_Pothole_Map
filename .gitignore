@@ -1,2 +1,4 @@
 .venv/
 __pycache__/
+# These contain images for testing which will clog up git
+API/uploads/

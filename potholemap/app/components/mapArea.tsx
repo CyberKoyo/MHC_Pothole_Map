@@ -1,10 +1,9 @@
 "use client";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import {
   MapContainer,
   TileLayer,
   Marker,
-  Popup,
   useMapEvents,
   useMap,
 } from "react-leaflet";
@@ -15,7 +14,9 @@ import L from "leaflet";
 import "leaflet.markercluster";
 import type { Pothole } from "../page";
 
-// 1. Create a child component to handle map clicks
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
+
+// 1. Child component to handle map clicks for pin placement
 function LocationMarker({
   position,
   setPosition,
@@ -23,24 +24,15 @@ function LocationMarker({
   position: [number, number];
   setPosition: (pos: [number, number]) => void;
 }) {
-  // useMapEvents listens to map interactions
   useMapEvents({
     click(e) {
-      // Log the exact coordinates to the browser console for debugging
       console.log("📍 Pin dropped at Lat:", e.latlng.lat, "Lng:", e.latlng.lng);
-
-      // Update the state with the exact latitude and longitude clicked
       setPosition([e.latlng.lat, e.latlng.lng]);
     },
   });
 
   return (
-    <Marker position={position}>
-      <Popup>
-        <strong className="text-red-600">Selected Location</strong> <br />
-        Ready to report a pothole here.
-      </Popup>
-    </Marker>
+    <Marker position={position} />
   );
 }
 
@@ -53,7 +45,13 @@ const potholeIcon = L.divIcon({
 });
 
 // Native Leaflet cluster layer – react-leaflet v5 has no official cluster wrapper
-function PotholeClusterLayer({ potholes }: { potholes: Pothole[] }) {
+function PotholeClusterLayer({
+  potholes,
+  onPotholeClick,
+}: {
+  potholes: Pothole[];
+  onPotholeClick: (p: Pothole) => void;
+}) {
   const map = useMap();
   const clusterRef = useRef<L.MarkerClusterGroup | null>(null);
 
@@ -82,15 +80,7 @@ function PotholeClusterLayer({ potholes }: { potholes: Pothole[] }) {
 
     potholes.forEach((p) => {
       const marker = L.marker([p.latitude, p.longitude], { icon: potholeIcon });
-      const desc = p.location_description
-        ? `<br/>${p.location_description}`
-        : "";
-      marker.bindPopup(
-        `<strong style="color:#dc2626">Reported Pothole</strong>${desc}<br/>
-         <span style="color:#64748b;font-size:12px">
-           Reported ${p.occurrences} time${p.occurrences !== 1 ? "s" : ""}
-         </span>`
-      );
+      marker.on("click", () => onPotholeClick(p));
       cluster.addLayer(marker);
     });
 
@@ -100,9 +90,148 @@ function PotholeClusterLayer({ potholes }: { potholes: Pothole[] }) {
     return () => {
       map.removeLayer(cluster);
     };
-  }, [map, potholes]);
+  }, [map, potholes, onPotholeClick]);
 
   return null;
+}
+
+// Image carousel inside the detail modal
+function ImageCarousel({ imageUrls }: { imageUrls: string[] }) {
+  const [current, setCurrent] = useState(0);
+
+  if (imageUrls.length === 0) return null;
+
+  const prev = () => setCurrent((i) => (i - 1 + imageUrls.length) % imageUrls.length);
+  const next = () => setCurrent((i) => (i + 1) % imageUrls.length);
+
+  return (
+    <div className="relative w-full select-none">
+      <div className="overflow-hidden rounded-lg bg-slate-100">
+        <img
+          src={imageUrls[current]}
+          alt={`Pothole photo ${current + 1}`}
+          className="w-full h-52 object-cover"
+          draggable={false}
+        />
+      </div>
+
+      {imageUrls.length > 1 && (
+        <>
+          <button
+            onClick={prev}
+            className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white rounded-full w-8 h-8 flex items-center justify-center text-lg leading-none"
+            aria-label="Previous image"
+          >
+            ‹
+          </button>
+          <button
+            onClick={next}
+            className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white rounded-full w-8 h-8 flex items-center justify-center text-lg leading-none"
+            aria-label="Next image"
+          >
+            ›
+          </button>
+          <div className="flex justify-center gap-1.5 mt-2">
+            {imageUrls.map((_, i) => (
+              <button
+                key={i}
+                onClick={() => setCurrent(i)}
+                className={`w-2 h-2 rounded-full transition-colors ${
+                  i === current ? "bg-red-600" : "bg-slate-300"
+                }`}
+                aria-label={`Go to image ${i + 1}`}
+              />
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// Detail modal shown when a pothole marker is tapped
+function PotholeDetailModal({
+  pothole,
+  onClose,
+  onDelete,
+}: {
+  pothole: Pothole;
+  onClose: () => void;
+  onDelete: (id: number) => void;
+}) {
+  const [imageUrls, setImageUrls] = useState<string[]>([]);
+  const [loadingImages, setLoadingImages] = useState(true);
+  const isAdmin =
+    typeof window !== "undefined" && !!localStorage.getItem("access_token");
+
+  useEffect(() => {
+    setLoadingImages(true);
+    fetch(`${API_BASE}/potholes/${pothole.id}/images`)
+      .then((r) => r.json())
+      .then((paths: string[]) =>
+        setImageUrls(paths.map((p) => `${API_BASE}${p}`))
+      )
+      .catch(() => setImageUrls([]))
+      .finally(() => setLoadingImages(false));
+  }, [pothole.id]);
+
+  return (
+    <div
+      className="fixed inset-0 z-[500] bg-black/50 flex items-end sm:items-center justify-center p-0 sm:p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl shadow-2xl flex flex-col gap-4 p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] max-h-[85dvh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-bold text-red-600">Reported Pothole</h2>
+          <button
+            onClick={onClose}
+            className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-600 font-bold text-sm"
+            aria-label="Close"
+          >
+            ✕
+          </button>
+        </div>
+
+        {/* Images */}
+        {loadingImages ? (
+          <div className="w-full h-20 flex items-center justify-center text-slate-400 text-sm animate-pulse">
+            Loading photos…
+          </div>
+        ) : imageUrls.length > 0 ? (
+          <ImageCarousel imageUrls={imageUrls} />
+        ) : (
+          <p className="text-slate-400 text-sm text-center py-2">No photos attached.</p>
+        )}
+
+        {/* Info */}
+        <div className="flex flex-col gap-1 text-sm text-slate-700">
+          {pothole.location_description && (
+            <p>{pothole.location_description}</p>
+          )}
+          <p className="text-slate-500">
+            Reported{" "}
+            <span className="font-semibold text-slate-700">
+              {pothole.occurrences} time{pothole.occurrences !== 1 ? "s" : ""}
+            </span>
+          </p>
+        </div>
+
+        {/* Admin action */}
+        {isAdmin && (
+          <button
+            onClick={() => onDelete(pothole.id)}
+            className="w-full bg-green-600 hover:bg-green-700 active:scale-95 text-white font-semibold py-3 rounded-xl transition-all"
+          >
+            Mark as Resolved
+          </button>
+        )}
+      </div>
+    </div>
+  );
 }
 
 type MapAreaProps = {
@@ -111,9 +240,13 @@ type MapAreaProps = {
   potholes: Pothole[];
 };
 
-export default function MapArea({ markerPosition, setMarkerPosition, potholes }: MapAreaProps) {
+export default function MapArea({
+  markerPosition,
+  setMarkerPosition,
+  potholes,
+}: MapAreaProps) {
+  const [selectedPothole, setSelectedPothole] = useState<Pothole | null>(null);
 
-  // Fix for Next.js missing Leaflet marker icons
   useEffect(() => {
     delete (L.Icon.Default.prototype as any)._getIconUrl;
     L.Icon.Default.mergeOptions({
@@ -124,22 +257,25 @@ export default function MapArea({ markerPosition, setMarkerPosition, potholes }:
         "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
     });
   }, []);
+
   const handleDelete = async (id: number) => {
-    const token = localStorage.getItem('access_token');
-    
-    if (!confirm("Are you sure you want to resolve and remove this pothole?")) return;
+    const token = localStorage.getItem("access_token");
+
+    if (!confirm("Are you sure you want to resolve and remove this pothole?"))
+      return;
 
     try {
-      const response = await fetch(`http://localhost:8000/potholes/${id}`, {
-        method: 'DELETE',
+      const response = await fetch(`${API_BASE}/potholes/${id}`, {
+        method: "DELETE",
         headers: {
-          'access_token': token || "" 
-        }
+          access_token: token || "",
+        },
       });
 
       if (response.ok) {
         alert("Pothole resolved!");
-        window.location.reload(); 
+        setSelectedPothole(null);
+        window.location.reload();
       } else {
         alert("Unauthorized or error occurred.");
       }
@@ -148,9 +284,13 @@ export default function MapArea({ markerPosition, setMarkerPosition, potholes }:
     }
   };
 
+  const handlePotholeClick = useCallback((p: Pothole) => {
+    setSelectedPothole(p);
+  }, []);
+
   return (
     <div className="w-full h-full relative z-0">
-      {/* A little floating UI to show the user the live coordinates */}
+      {/* Live coordinate display */}
       <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[400] bg-white px-4 py-2 rounded-full shadow-md border border-slate-200 pointer-events-none">
         <p className="text-xs font-mono text-slate-700">
           Lat: {markerPosition[0].toFixed(4)} | Lng:{" "}
@@ -159,7 +299,7 @@ export default function MapArea({ markerPosition, setMarkerPosition, potholes }:
       </div>
 
       <MapContainer
-        center={[40.7128, -74.006]} // Initial map center
+        center={[40.7128, -74.006]}
         zoom={13}
         className="w-full h-full"
         zoomControl={false}
@@ -169,41 +309,24 @@ export default function MapArea({ markerPosition, setMarkerPosition, potholes }:
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
 
-        {/* Interactive marker for selecting a location to report */}
         <LocationMarker
           position={markerPosition}
           setPosition={setMarkerPosition}
         />
 
-        {/* One red dot for every reported pothole */}
-        {potholes.map((p) => (
-          <Marker key={p.id} position={[p.latitude, p.longitude]} icon={potholeIcon}>
-            <Popup>
-              <strong className="text-red-600">Reported Pothole</strong>
-              {p.location_description && (
-                <><br />{p.location_description}</>
-              )}
-              <br />
-              <span className="text-slate-500 text-xs">
-                Reported {p.occurrences} time{p.occurrences !== 1 ? "s" : ""}
-              </span>
-
-              {/* ADMIN ACTION: Resolve/Delete Button */}
-              {typeof window !== 'undefined' && localStorage.getItem('access_token') && (
-                <div className="mt-3 pt-2 border-t border-slate-100 flex flex-col gap-2">
-                  
-                  <button
-                    onClick={() => handleDelete(p.id)}
-                    className="w-full bg-green-600 hover:bg-green-700 text-white text-[10px] font-bold py-1 px-2 rounded"
-                  >
-                    Mark as Resolved
-                  </button>
-                </div>
-              )}
-            </Popup>
-          </Marker>
-        ))} 
+        <PotholeClusterLayer
+          potholes={potholes}
+          onPotholeClick={handlePotholeClick}
+        />
       </MapContainer>
+
+      {selectedPothole && (
+        <PotholeDetailModal
+          pothole={selectedPothole}
+          onClose={() => setSelectedPothole(null)}
+          onDelete={handleDelete}
+        />
+      )}
     </div>
   );
 }

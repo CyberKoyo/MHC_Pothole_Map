@@ -90,6 +90,16 @@ export default function ReportModal({ mapLocation, onPotholeAdded }: Props) {
 
       if (!res.ok) throw new Error(`Server error: ${res.status}`);
       const newPothole: Pothole = await res.json();
+
+      if (selectedFiles.length > 0) {
+        const formData = new FormData();
+        selectedFiles.forEach((file) => formData.append('files', file));
+        await fetch(`${API_BASE}/potholes/${newPothole.id}/images`, {
+          method: 'POST',
+          body: formData,
+        });
+      }
+
       onPotholeAdded(newPothole);
       setSubmitState('success');
       setTimeout(closeModal, 1500);
@@ -171,7 +181,8 @@ export default function ReportModal({ mapLocation, onPotholeAdded }: Props) {
                 <p className="text-slate-800">Severity</p>
                 <select 
                   className="w-full border border-slate-300 rounded-lg p-3 text-black outline-none"
-                  defaultValue=""
+                  value={severity}
+                  onChange={(e) => setSeverity(e.target.value)}
                 >
                   <option value="" disabled>--Select an option--</option>
                   <option value="minor">Minor (Bumpy)</option>
