@@ -23,6 +23,20 @@ const SEVERITY_LABELS: Record<string, { label: string; class: string }> = {
   severe:   { label: "Severe",   class: "bg-red-100 text-red-800 border-red-200" },
 };
 
+function formatReadableDate(isoString: string): string {
+  const date = new Date(isoString);
+
+  if (isNaN(date.getTime())) return "Invalid date";
+
+  return date.toLocaleString("en-US", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+}
 // Handles map clicks to move the placement pin
 function LocationMarker({
   position,
@@ -215,9 +229,14 @@ function PotholeDetailModal({
         <div className="flex items-start justify-between gap-3">
           <div>
             <h2 className="text-lg font-bold text-slate-900">Reported Pothole</h2>
+            <p className="text-sm text-slate-500 mt-0.5">Last reported: {formatReadableDate(pothole.last_reported)}</p>
+            {pothole.severity && (
+              <p className="text-sm text-slate-500 mt-0.5">Severity: {pothole.severity}</p>
+            )}
             {pothole.location_description && (
               <p className="text-sm text-slate-500 mt-0.5">{pothole.location_description}</p>
             )}
+            
           </div>
           <button
             onClick={onClose}
