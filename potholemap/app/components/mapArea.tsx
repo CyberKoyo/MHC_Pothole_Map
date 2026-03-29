@@ -178,10 +178,12 @@ function PotholeDetailModal({
   pothole,
   onClose,
   onDelete,
+  onOccurrenceUpdated,
 }: {
   pothole: Pothole;
   onClose: () => void;
   onDelete: (id: number) => void;
+  onOccurrenceUpdated: (id: number, newCount: number) => void;
 }) {
   const [imageUrls, setImageUrls] = useState<string[]>([]);
   const [loadingImages, setLoadingImages] = useState(true);
@@ -199,6 +201,7 @@ function PotholeDetailModal({
       if (r.ok) {
         const data = await r.json();
         setOccurrences(data.occurrences);
+        onOccurrenceUpdated(pothole.id, data.occurrences);
       }
     } finally {
       setReporting(false);
@@ -304,12 +307,14 @@ type MapAreaProps = {
   markerPosition: [number, number];
   setMarkerPosition: (pos: [number, number]) => void;
   potholes: Pothole[];
+  onOccurrenceUpdated: (id: number, newCount: number) => void;
 };
 
 export default function MapArea({
   markerPosition,
   setMarkerPosition,
   potholes,
+  onOccurrenceUpdated,
 }: MapAreaProps) {
   const [selectedPothole, setSelectedPothole] = useState<Pothole | null>(null);
 
@@ -392,9 +397,11 @@ export default function MapArea({
 
       {selectedPothole && (
         <PotholeDetailModal
+          key={selectedPothole.id}
           pothole={selectedPothole}
           onClose={() => setSelectedPothole(null)}
           onDelete={handleDelete}
+          onOccurrenceUpdated={onOccurrenceUpdated}
         />
       )}
     </div>

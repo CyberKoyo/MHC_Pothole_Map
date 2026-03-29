@@ -2,7 +2,7 @@ from fastapi import FastAPI, HTTPException, Query, Depends, Security, status, Up
 from fastapi.security.api_key import APIKeyHeader
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from sqlalchemy import create_engine, Column, Integer, String, DateTime, Float, ForeignKey
+from sqlalchemy import create_engine, Column, Integer, String, DateTime, Float, ForeignKey, text
 from sqlalchemy.orm import declarative_base, sessionmaker, Session, relationship
 from pydantic import BaseModel, ConfigDict
 from datetime import datetime
@@ -46,6 +46,7 @@ class Pothole(Base):
     first_reported = Column(DateTime, default=datetime.utcnow, nullable=False)
     last_reported = Column(DateTime, default=datetime.utcnow, nullable=False)
     occurrences = Column(Integer, default=1, nullable=False)
+    deleted = Column(DateTime, nullable=True, default=None)
 
     images = relationship("PotholeImage", back_populates="pothole", cascade="all, delete-orphan")
 
@@ -91,6 +92,7 @@ class PotholeResponse(BaseModel):
     first_reported: datetime
     last_reported: datetime
     occurrences: int
+    deleted: Optional[datetime] = None
 
 # Admin credentials — set these as environment variables in production.
 # The defaults match the original dev values so local runs keep working unchanged.
@@ -129,6 +131,14 @@ def get_db():
         db.close()
 
 Base.metadata.create_all(bind=engine)
+
+# Migrate existing databases that predate the `deleted` column.
+with engine.connect() as _conn:
+    try:
+        _conn.execute(text("ALTER TABLE potholes ADD COLUMN deleted DATETIME"))
+        _conn.commit()
+    except Exception:
+        pass  # column already exists
 
 app = FastAPI(title="Pothole Tracker API")
 
@@ -228,13 +238,17 @@ def list_potholes(
     min_occurrences: Optional[int] = Query(None, ge=0),
     max_occurrences: Optional[int] = Query(None, ge=0),
     sort_by_frequency: bool = False,
+    include_deleted: bool = False,
     db: Session = Depends(get_db)
 ):
     """
     List potholes with filters for location and occurrence count.
     Set sort_by_frequency=True to see the most reported potholes first.
+    Set include_deleted=True to also return soft-deleted (resolved) potholes.
     """
     query = db.query(Pothole)
+    if not include_deleted:
+        query = query.filter(Pothole.deleted == None)
 
     # Location Filters
     if borough:
@@ -267,7 +281,7 @@ def update_pothole(
     admin: bool = Depends(get_admin_user)
 ):
     """Update a pothole"""
-    pothole = db.query(Pothole).filter(Pothole.id == pothole_id).first()
+    pothole = db.query(Pothole).filter(Pothole.id == pothole_id, Pothole.deleted == None).first()
     if not pothole:
         raise HTTPException(status_code=404, detail="Pothole not found")
     
@@ -282,7 +296,7 @@ def update_pothole(
 @app.post("/potholes/{pothole_id}/report")
 def report_pothole_again(pothole_id: int, db: Session = Depends(get_db)):
     """Increment occurrence count and update last_reported timestamp"""
-    pothole = db.query(Pothole).filter(Pothole.id == pothole_id).first()
+    pothole = db.query(Pothole).filter(Pothole.id == pothole_id, Pothole.deleted == None).first()
     if not pothole:
         raise HTTPException(status_code=404, detail="Pothole not found")
     
@@ -300,11 +314,11 @@ def delete_pothole(
     admin: bool = Depends(get_admin_user)
     ):
     """Delete a pothole record"""
-    pothole = db.query(Pothole).filter(Pothole.id == pothole_id).first()
+    pothole = db.query(Pothole).filter(Pothole.id == pothole_id, Pothole.deleted == None).first()
     if not pothole:
         raise HTTPException(status_code=404, detail="Pothole not found")
     
-    db.delete(pothole)
+    pothole.deleted = datetime.utcnow()
     db.commit()
     return None
 
@@ -315,7 +329,7 @@ async def upload_pothole_images(
     db: Session = Depends(get_db),
 ):
     """Upload one or more images for a pothole."""
-    pothole = db.query(Pothole).filter(Pothole.id == pothole_id).first()
+    pothole = db.query(Pothole).filter(Pothole.id == pothole_id, Pothole.deleted == None).first()
     if not pothole:
         raise HTTPException(status_code=404, detail="Pothole not found")
 
@@ -336,7 +350,7 @@ async def upload_pothole_images(
 @app.get("/potholes/{pothole_id}/images")
 def get_pothole_images(pothole_id: int, db: Session = Depends(get_db)):
     """Return a list of image URL paths for a pothole."""
-    pothole = db.query(Pothole).filter(Pothole.id == pothole_id).first()
+    pothole = db.query(Pothole).filter(Pothole.id == pothole_id, Pothole.deleted == None).first()
     if not pothole:
         raise HTTPException(status_code=404, detail="Pothole not found")
     return [f"/uploads/{img.filename}" for img in pothole.images]
@@ -347,8 +361,8 @@ def get_stats(db: Session = Depends(get_db)):
     """Get general statistics"""
     from sqlalchemy import func
     
-    total = db.query(Pothole).count()
-    total_occurrences = db.query(func.sum(Pothole.occurrences)).scalar() or 0
+    total = db.query(Pothole).filter(Pothole.deleted == None).count()
+    total_occurrences = db.query(func.sum(Pothole.occurrences)).filter(Pothole.deleted == None).scalar() or 0
     
     return {
         "total_potholes": total,

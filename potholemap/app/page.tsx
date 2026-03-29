@@ -1,8 +1,9 @@
 "use client"
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import dynamic from 'next/dynamic';
 import Footer from './components/footer';
 import ReportModal from './components/reportModal';
+import FilterPanel, { DEFAULT_FILTERS, type FilterState } from './components/filterPanel';
 import { RequestGeolocation } from '@/components/RequestGeolocation';
 import Header from './components/header';
 
@@ -20,6 +21,8 @@ export type Pothole = {
   last_reported: string;
   severity?: string | null;
   occurrences: number;
+  borough?: string | null;
+  deleted?: string | null;
 };
 
 // Dynamically import the map so it doesn't break SSR
@@ -34,17 +37,40 @@ const MapArea = dynamic(() => import('./components/mapArea'), {
 
 export default function Home() {
   const [markerPosition, setMarkerPosition] = useState<[number, number]>([40.7128, -74.006]);
-  const [potholes, setPotholes] = useState<Pothole[]>([]);
+  const [allPotholes, setAllPotholes] = useState<Pothole[]>([]);
+  const [filters, setFilters] = useState<FilterState>(DEFAULT_FILTERS);
 
+  // Re-fetch only when showDeleted changes (it determines which rows the API returns).
   useEffect(() => {
-    fetch(`${API_BASE}/potholes/?limit=1000`)
+    const params = new URLSearchParams({ limit: '1000' });
+    if (filters.showDeleted) params.set('include_deleted', 'true');
+    fetch(`${API_BASE}/potholes/?${params}`)
       .then((res) => res.json())
-      .then((data: Pothole[]) => setPotholes(data))
+      .then((data: Pothole[]) => setAllPotholes(data))
       .catch((err) => console.error('Failed to load potholes:', err));
-  }, []);
+  }, [filters.showDeleted]);
+
+  // All other filtering is client-side so it's instant.
+  const potholes = useMemo(() => {
+    let list = allPotholes;
+    if (!filters.showDeleted) list = list.filter((p) => !p.deleted);
+    if (filters.boroughs.length > 0)
+      list = list.filter((p) =>
+        filters.boroughs.some((b) => p.borough?.toLowerCase().includes(b.toLowerCase()))
+      );
+    if (filters.minOccurrences !== '')
+      list = list.filter((p) => p.occurrences >= (filters.minOccurrences as number));
+    return list;
+  }, [allPotholes, filters]);
 
   const addPothole = useCallback((pothole: Pothole) => {
-    setPotholes((prev) => [...prev, pothole]);
+    setAllPotholes((prev) => [...prev, pothole]);
+  }, []);
+
+  const handleOccurrenceUpdated = useCallback((id: number, newCount: number) => {
+    setAllPotholes((prev) =>
+      prev.map((p) => (p.id === id ? { ...p, occurrences: newCount } : p))
+    );
   }, []);
 
   return (
@@ -59,7 +85,8 @@ export default function Home() {
       
       {/* Map Section - Takes up all available space */}
       <div className="flex-grow relative w-full h-full">
-        <MapArea markerPosition={markerPosition} setMarkerPosition={setMarkerPosition} potholes={potholes} />
+        <MapArea markerPosition={markerPosition} setMarkerPosition={setMarkerPosition} potholes={potholes} onOccurrenceUpdated={handleOccurrenceUpdated} />
+        <FilterPanel filters={filters} onChange={setFilters} totalVisible={potholes.length} />
         <ReportModal mapLocation={markerPosition} onPotholeAdded={addPothole} />
       </div>
 
