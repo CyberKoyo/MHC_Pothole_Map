@@ -13,6 +13,7 @@ export type Pothole = {
   latitude: number;
   longitude: number;
   location_description?: string | null;
+  severity?: string | null;
   occurrences: number;
 };
 
