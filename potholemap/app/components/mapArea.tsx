@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useRef, useState, useCallback } from "react";
+import { createPortal } from "react-dom";
 import {
   MapContainer,
   TileLayer,
@@ -175,7 +176,7 @@ function PotholeDetailModal({
       .finally(() => setLoadingImages(false));
   }, [pothole.id]);
 
-  return (
+  return createPortal(
     <div
       className="fixed inset-0 z-[500] bg-black/50 flex items-end sm:items-center justify-center p-0 sm:p-4"
       onClick={onClose}
@@ -230,7 +231,8 @@ function PotholeDetailModal({
           </button>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
