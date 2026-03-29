@@ -162,8 +162,23 @@ function PotholeDetailModal({
 }) {
   const [imageUrls, setImageUrls] = useState<string[]>([]);
   const [loadingImages, setLoadingImages] = useState(true);
+  const [occurrences, setOccurrences] = useState(pothole.occurrences);
+  const [reporting, setReporting] = useState(false);
   const isAdmin =
     typeof window !== "undefined" && !!localStorage.getItem("access_token");
+
+  async function handleReportAgain() {
+    setReporting(true);
+    try {
+      const r = await fetch(`${API_BASE}/potholes/${pothole.id}/report`, { method: "POST" });
+      if (r.ok) {
+        const data = await r.json();
+        setOccurrences(data.occurrences);
+      }
+    } finally {
+      setReporting(false);
+    }
+  }
 
   useEffect(() => {
     setLoadingImages(true);
@@ -216,10 +231,19 @@ function PotholeDetailModal({
           <p className="text-slate-500">
             Reported{" "}
             <span className="font-semibold text-slate-700">
-              {pothole.occurrences} time{pothole.occurrences !== 1 ? "s" : ""}
+              {occurrences} time{occurrences !== 1 ? "s" : ""}
             </span>
           </p>
         </div>
+
+        {/* Report again */}
+        <button
+          onClick={handleReportAgain}
+          disabled={reporting}
+          className="w-full bg-red-600 hover:bg-red-700 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold py-3 rounded-xl transition-all"
+        >
+          {reporting ? "Reporting…" : "I've seen this pothole too"}
+        </button>
 
         {/* Admin action */}
         {isAdmin && (
@@ -288,7 +312,8 @@ export default function MapArea({
 
   const handlePotholeClick = useCallback((p: Pothole) => {
     setSelectedPothole(p);
-  }, []);
+    setMarkerPosition([p.latitude, p.longitude]);
+  }, [setMarkerPosition]);
 
   return (
     <div className="w-full h-full relative z-0">
